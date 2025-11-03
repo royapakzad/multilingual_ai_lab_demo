@@ -707,7 +707,8 @@ const ReasoningLab: React.FC<ReasoningLabProps> = ({ currentUser }) => {
            evaluation.promptB.toLowerCase().includes(query) ||
            evaluation.scenarioContext?.toLowerCase().includes(query) ||
            evaluation.titleA.toLowerCase().includes(query) ||
-           evaluation.titleB.toLowerCase().includes(query);
+           evaluation.titleB.toLowerCase().includes(query) ||
+           evaluation.userEmail.toLowerCase().includes(query);
   });
   
   return (
@@ -831,7 +832,7 @@ const ReasoningLab: React.FC<ReasoningLabProps> = ({ currentUser }) => {
               <div className="relative max-w-md">
                 <input
                   type="text"
-                  placeholder="Search scenarios by prompt, context, or title..."
+                  placeholder="Search scenarios by prompt, context, title, or evaluator..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent text-sm"
