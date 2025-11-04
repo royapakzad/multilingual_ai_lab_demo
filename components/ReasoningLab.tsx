@@ -11,10 +11,11 @@ import {
     LanguageSpecificRubricScores, HarmDisparityMetrics, 
     VerifiableEntity, RubricDimension, CsvScenario, LlmEvaluation
 } from '../types';
-import { 
-    EVALUATIONS_KEY, AVAILABLE_MODELS, REASONING_SYSTEM_INSTRUCTION, 
+import {
+    EVALUATIONS_KEY, AVAILABLE_MODELS, REASONING_SYSTEM_INSTRUCTION,
     INITIAL_LANGUAGE_SPECIFIC_RUBRIC_SCORES, INITIAL_HARM_DISPARITY_METRICS,
-    AVAILABLE_NATIVE_LANGUAGES, RUBRIC_DIMENSIONS, HARM_SCALE, YES_NO_UNSURE_OPTIONS, DISPARITY_CRITERIA
+    AVAILABLE_NATIVE_LANGUAGES, RUBRIC_DIMENSIONS, HARM_SCALE, YES_NO_UNSURE_OPTIONS, DISPARITY_CRITERIA,
+    PRELOADED_SCENARIOS
 } from '../constants';
 import * as config from '../env.js';
 import LoadingSpinner from './LoadingSpinner';
@@ -24,7 +25,7 @@ import ReasoningDashboard from './ReasoningDashboard';
 import Tooltip from './Tooltip';
 import { generateLlmResponse, translateText, evaluateWithLlm } from '../services/llmService';
 import { analyzeTextResponse } from '../services/textAnalysisService';
-import * as db from '../services/localStorageService';
+import * as db from '../services/supabaseService';
 import EvaluationComparison from './EvaluationComparison';
 
 // --- HELPER COMPONENTS ---
@@ -173,9 +174,10 @@ const ReasoningLab: React.FC<ReasoningLabProps> = ({ currentUser }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Input Mode State
-  const [inputMode, setInputMode] = useState<'custom' | 'csv'>('custom');
+  const [inputMode, setInputMode] = useState<'custom' | 'csv' | 'preloaded'>('preloaded');
   const [csvScenarios, setCsvScenarios] = useState<CsvScenario[]>([]);
   const [selectedCsvScenarioId, setSelectedCsvScenarioId] = useState<string>('');
+  const [selectedPreloadedScenarioId, setSelectedPreloadedScenarioId] = useState<string>('');
   const [csvError, setCsvError] = useState<string | null>(null);
   const [currentScenarioContext, setCurrentScenarioContext] = useState<string>('');
 
@@ -462,8 +464,10 @@ const ReasoningLab: React.FC<ReasoningLabProps> = ({ currentUser }) => {
     const existingRecord = isUpdating ? allEvaluations.find(ev => ev.id === editingEvaluationId) : undefined;
     
     const langInfo = AVAILABLE_NATIVE_LANGUAGES.find(l => l.code === selectedNativeLanguageCode);
-    const scenarioId = inputMode === 'csv' ? `csv-scenario-${selectedCsvScenarioId}` : 'custom';
-    const scenarioCategory = inputMode === 'csv' ? 'CSV Upload' : 'Custom';
+    const scenarioId = inputMode === 'csv' ? `csv-scenario-${selectedCsvScenarioId}` :
+                      inputMode === 'preloaded' ? `preloaded-scenario-${selectedPreloadedScenarioId}` : 'custom';
+    const scenarioCategory = inputMode === 'csv' ? 'CSV Upload' :
+                            inputMode === 'preloaded' ? 'Preloaded Scenario' : 'Custom';
     
     const recordData: ReasoningEvaluationRecord = {
         id: isUpdating ? editingEvaluationId! : `${new Date().toISOString()}-reasoning-${Math.random().toString(16).slice(2)}`,
@@ -513,7 +517,7 @@ const ReasoningLab: React.FC<ReasoningLabProps> = ({ currentUser }) => {
         alert(isUpdating ? "Evaluation updated successfully!" : "Human evaluation saved! Now getting LLM evaluation in the background...");
 
         resetForNewRun();
-        setPromptA(''); setPromptB(''); setCurrentScenarioContext(''); setSelectedCsvScenarioId('');
+        setPromptA(''); setPromptB(''); setCurrentScenarioContext(''); setSelectedCsvScenarioId(''); setSelectedPreloadedScenarioId('');
         
         if (!isUpdating) {
             (async () => {
@@ -654,6 +658,17 @@ const ReasoningLab: React.FC<ReasoningLabProps> = ({ currentUser }) => {
         }
     }
   }, [selectedCsvScenarioId, csvScenarios, inputMode]);
+
+  useEffect(() => {
+    if (inputMode === 'preloaded' && selectedPreloadedScenarioId) {
+        const scenario = PRELOADED_SCENARIOS.find(s => s.id === parseInt(selectedPreloadedScenarioId, 10));
+        if (scenario) {
+            setPromptA(scenario.prompt);
+            setCurrentScenarioContext(scenario.context);
+            resetForNewRun();
+        }
+    }
+  }, [selectedPreloadedScenarioId, inputMode]);
   
   const downloadCSV = () => {
     if (visibleEvaluations.length === 0) return alert("No data to export.");
@@ -723,24 +738,40 @@ const ReasoningLab: React.FC<ReasoningLabProps> = ({ currentUser }) => {
                  <div className="flex items-center space-x-4">
                     <h3 className="text-md font-semibold text-foreground">Scenario Input Method</h3>
                     <div className="flex items-center space-x-2 bg-muted p-1 rounded-lg">
-                        {(['custom', 'csv'] as const).map(mode => (
+                        {(['preloaded', 'custom', 'csv'] as const).map(mode => (
                             <button
                                 key={mode}
-                                onClick={() => { setInputMode(mode); setPromptA(''); setPromptB(''); setSelectedCsvScenarioId(''); setCurrentScenarioContext(''); }}
+                                onClick={() => { setInputMode(mode); setPromptA(''); setPromptB(''); setSelectedCsvScenarioId(''); setSelectedPreloadedScenarioId(''); setCurrentScenarioContext(''); }}
                                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${inputMode === mode ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground hover:bg-background/50'}`}
                             >
-                                {mode === 'custom' ? 'Custom Scenario' : 'Upload CSV'}
+                                {mode === 'preloaded' ? 'Preloaded Scenarios' : mode === 'custom' ? 'Custom Scenario' : 'Upload CSV'}
                             </button>
                         ))}
                     </div>
                 </div>
 
-                {inputMode === 'custom' ? (
+                {inputMode === 'preloaded' ? (
+                    <div>
+                        <label htmlFor="preloaded-scenario-select" className="block text-sm font-medium text-foreground mb-1">Select Preloaded Scenario ({PRELOADED_SCENARIOS.length} available)</label>
+                        <p className="text-xs text-muted-foreground mb-2">Choose from curated scenarios covering GBV, Migration, and Government Services themes.</p>
+                        <select id="preloaded-scenario-select" value={selectedPreloadedScenarioId} onChange={e => setSelectedPreloadedScenarioId(e.target.value)} className="form-select w-full p-2 border rounded-md shadow-sm bg-card border-border focus:outline-none focus:ring-2 focus:ring-ring text-sm">
+                            <option value="">-- Choose a preloaded scenario --</option>
+                            {PRELOADED_SCENARIOS.map(s => <option key={s.id} value={s.id}>Scenario {s.id}: {s.context}</option>)}
+                        </select>
+                        {selectedPreloadedScenarioId && (
+                            <div className="mt-3 p-3 bg-muted rounded-md">
+                                <h4 className="font-medium text-foreground mb-2">Selected Scenario Preview:</h4>
+                                <p className="text-xs text-muted-foreground mb-2"><strong>Context:</strong> {PRELOADED_SCENARIOS.find(s => s.id === parseInt(selectedPreloadedScenarioId))?.context}</p>
+                                <p className="text-xs text-muted-foreground"><strong>Prompt:</strong> {PRELOADED_SCENARIOS.find(s => s.id === parseInt(selectedPreloadedScenarioId))?.prompt}</p>
+                            </div>
+                        )}
+                    </div>
+                ) : inputMode === 'custom' ? (
                      <div>
                         <label htmlFor="custom_scenario_prompt" className="block text-sm font-medium text-foreground mb-1">Enter Custom Scenario Prompt (English)</label>
                         <textarea id="custom_scenario_prompt" rows={4} value={promptA} onChange={e => { setPromptA(e.target.value); resetForNewRun(); }}
                             className="form-textarea w-full p-2 border rounded-md shadow-sm bg-card border-border focus:outline-none focus:ring-2 focus:ring-ring text-sm font-mono"
-                            placeholder="e.g., “My Greek asylum card will expire in 20 days... Is there another way?”" />
+                            placeholder="e.g., 'My Greek asylum card will expire in 20 days... Is there another way?'" />
                     </div>
                 ) : (
                     <div className="space-y-3">
