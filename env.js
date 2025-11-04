@@ -6,6 +6,10 @@ export const API_KEY = "";
 export const OPENAI_API_KEY = "";
 export const MISTRAL_API_KEY = "";
 
+// Supabase configuration
+export const SUPABASE_URL = "";
+export const SUPABASE_ANON_KEY = "";
+
 // Admin credentials for production are set via environment variables
 export const ADMIN_EMAIL = "";
 export const ADMIN_PASSWORD = "";
