@@ -11,10 +11,6 @@ export const API_KEY = "${process.env.API_KEY || ''}";
 export const OPENAI_API_KEY = "${process.env.OPENAI_API_KEY || ''}";
 export const MISTRAL_API_KEY = "${process.env.MISTRAL_API_KEY || ''}";
 
-// Supabase configuration
-export const SUPABASE_URL = "${process.env.SUPABASE_URL || ''}";
-export const SUPABASE_ANON_KEY = "${process.env.SUPABASE_ANON_KEY || ''}";
-
 // Admin credentials for production are set via environment variables
 export const ADMIN_EMAIL = "${process.env.ADMIN_EMAIL || ''}";
 export const ADMIN_PASSWORD = "${process.env.ADMIN_PASSWORD || ''}";
